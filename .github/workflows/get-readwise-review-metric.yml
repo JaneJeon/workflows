@@ -1,0 +1,41 @@
+name: Readwise Daily Review API to Metric
+
+on:
+  schedule:
+    - cron: "0 * * * *" # Runs at the start of every hour
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  get-metric:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Setup Python
+        uses: actions/setup-python@v5 # it will resolve from the .python-version file
+        with:
+          cache: poetry # it will automatically detect poetry config and cache .venv
+      # https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#caching-packages
+      - run: poetry install --no-root
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Publish Readwise Metrics
+        run: poetry run python ./scripts/readwise-daily-review-metric.py
+        env:
+          READWISE_READER_API_TOKEN: ${{ secrets.READWISE_READER_API_TOKEN }}
+          VICTORIAMETRICS_HTTP_ENDPOINT: ${{ vars.VICTORIAMETRICS_HTTP_ENDPOINT }}
+          RUNTIME__LOG_LEVEL: INFO
+
+      - name: Ping for Liveness
+        run: curl -sS http://uptime-kuma.railway.internal:8080/api/push/CLt36RDwuu?status=up&msg=OK&ping=
